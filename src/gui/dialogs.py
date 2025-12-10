@@ -41,12 +41,9 @@ class ParametersDialog(QDialog):
         layout.addLayout(form)
         
         buttons = QHBoxLayout()
-        self.ok_btn = QPushButton("ОК")
-        self.cancel_btn = QPushButton("Отмена")
+        self.ok_btn = QPushButton("Применить")
         self.ok_btn.clicked.connect(self.accept)
-        self.cancel_btn.clicked.connect(self.reject)
         buttons.addWidget(self.ok_btn)
-        buttons.addWidget(self.cancel_btn)
         layout.addLayout(buttons)
         
         self.setLayout(layout)
@@ -178,12 +175,9 @@ class EnvironmentDialog(QDialog):
 
         
         buttons = QHBoxLayout()
-        self.generate_btn = QPushButton("Сгенерировать")
-        self.cancel_btn = QPushButton("Отмена")
+        self.generate_btn = QPushButton("Применить")
         self.generate_btn.clicked.connect(self.accept)
-        self.cancel_btn.clicked.connect(self.reject)
         buttons.addWidget(self.generate_btn)
-        buttons.addWidget(self.cancel_btn)
         layout.addLayout(buttons)
         
         self.setLayout(layout)
