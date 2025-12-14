@@ -4,13 +4,8 @@ from .geometry import Polygon, Point
 from .config import PlannerConfig
 
 
-class Obstacle:
-    def __init__(self, polygon: Polygon):
-        self.polygon = polygon
-
-
 class Environment:
-    def __init__(self, start: Point, goal: Point, obstacles: list[Obstacle], bounds: tuple[float, float, float, float]):
+    def __init__(self, start: Point, goal: Point, obstacles: list[Polygon], bounds: tuple[float, float, float, float]):
         self.start = start
         self.goal = goal
         self.obstacles = obstacles
@@ -29,13 +24,13 @@ class Environment:
         return Environment(start=start, goal=goal, obstacles=obstacles, bounds=(x_min, x_max, y_min, y_max))
 
     @staticmethod
-    def generate_obstacles(config: PlannerConfig, start: Point, goal: Point, seed: int | None = None) -> list[Obstacle]:
+    def generate_obstacles(config: PlannerConfig, start: Point, goal: Point, seed: int | None = None) -> list[Polygon]:
         rng = random.Random(seed)
         # Фиксированная область генерации препятствий: от -6 до 6
         obstacle_x_min, obstacle_x_max = -6.0, 6.0
         obstacle_y_min, obstacle_y_max = -6.0, 6.0
         
-        obstacles: list[Obstacle] = []
+        obstacles: list[Polygon] = []
         attempts = 0
         max_attempts = config.num_obstacles * 20
         
@@ -54,7 +49,7 @@ class Environment:
             
             # Проверка что препятствие не содержит start/goal
             if not poly.contains_point(start) and not poly.contains_point(goal):
-                obstacles.append(Obstacle(poly))
+                obstacles.append(poly)
             
             attempts += 1
         

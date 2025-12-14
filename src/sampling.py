@@ -119,7 +119,7 @@ class SampleGenerator:
         """Получает начальные метки препятствий"""
         labels = []
         for obs in env.obstacles:
-            verts = obs.polygon.vertices
+            verts = obs.vertices
             centroid = np.array([
                 sum(v[0] for v in verts) / len(verts),
                 sum(v[1] for v in verts) / len(verts)
@@ -150,7 +150,7 @@ class SampleGenerator:
         
         for obs_idx, obs in enumerate(env.obstacles):
             obs_label = obstacle_labels[obs_idx]
-            verts = obs.polygon.vertices
+            verts = obs.vertices
             n = len(verts)
             for i in range(n):
                 a = verts[i]
@@ -163,16 +163,16 @@ class SampleGenerator:
         dg = self.config.guide_sample_distance
         dp = self.config.guide_sample_spacing
         n_start = self.config.guide_samples_near_points
-        all_obstacles = [obs.polygon for obs in env.obstacles]
+        all_obstacles = list(env.obstacles)
         L_local = self.config.obstacle_proximity_threshold
         
         obstacle_zones: list[tuple[float, Polygon, bool]] = []
         for obs in env.obstacles:
-            dist = self._polygon_distance_to_segment(obs.polygon, tuple(start), tuple(goal))
+            dist = self._polygon_distance_to_segment(obs, tuple(start), tuple(goal))
             intersects = dist < 0
             if dist <= L_local:
-                t, proj = self._find_obstacle_projection_on_line(obs.polygon, start, dir_vec, line_length)
-                obstacle_zones.append((t, obs.polygon, intersects))
+                t, proj = self._find_obstacle_projection_on_line(obs, start, dir_vec, line_length)
+                obstacle_zones.append((t, obs, intersects))
         
         obstacle_zones.sort(key=lambda x: x[0])
         

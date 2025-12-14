@@ -3,8 +3,9 @@ import warnings
 import numpy as np
 from scipy.interpolate import splprep, splev
 
-from .svm_model import SVMModel
+from .svm import KernelSVM
 from .config import PlannerConfig
+from .geometry import Polygon, GeometryUtils
 
 
 class PathResult:
@@ -56,7 +57,7 @@ class PathExtractor:
         seg = np.linalg.norm(diffs, axis=1)
         return float(seg.sum())
     
-    def _find_zero_cross_along_ray(self, model: SVMModel, origin: np.ndarray, direction: np.ndarray, ds: float, max_dist: float, margin: float = 1.0) -> tuple[bool, np.ndarray]:
+    def _find_zero_cross_along_ray(self, model: KernelSVM, origin: np.ndarray, direction: np.ndarray, ds: float, max_dist: float, margin: float = 1.0) -> tuple[bool, np.ndarray]:
         """Находит пересечение нуля вдоль луча"""
         f_origin = model.decision(origin.reshape(1, -1))[0]
         if abs(f_origin) < 0.1:
@@ -96,19 +97,29 @@ class PathExtractor:
         
         return False, origin
     
-    def extract(self, model: SVMModel, start: tuple[float, float], goal: tuple[float, float]) -> PathResult:
+    def extract(
+        self,
+        model: KernelSVM,
+        start: tuple[float, float],
+        goal: tuple[float, float],
+        obstacles: list[Polygon] | None = None,
+    ) -> PathResult:
         """Извлекает путь из модели SVM"""
         p = np.array(start, dtype=float)
         goal_np = np.array(goal, dtype=float)
 
         path: list[tuple[float, float]] = [tuple(p)]
         sector = math.radians(self.config.sector_angle_deg)
+        obstacles = obstacles or []
 
         for _ in range(self.config.max_steps):
             to_goal = goal_np - p
             dist_goal = float(np.linalg.norm(to_goal))
             if dist_goal < self.config.step_ds * 1.2:
-                path.append((float(goal_np[0]), float(goal_np[1])))
+                candidate_goal = (float(goal_np[0]), float(goal_np[1]))
+                if any(GeometryUtils.segment_intersects_polygon(tuple(p), candidate_goal, obs) for obs in obstacles):
+                    return PathResult(points=path, reached=False)
+                path.append(candidate_goal)
                 return PathResult(points=path, reached=True)
 
             heading = to_goal / (dist_goal + 1e-12)
@@ -120,7 +131,9 @@ class PathExtractor:
                 direct_step = min(self.config.step_ds * 1.5, dist_goal)
                 p_direct = p + heading * direct_step
                 f_direct = model.decision(p_direct.reshape(1, -1))[0]
-                if abs(f_direct) < 1.0:
+                if abs(f_direct) < 1.0 and not any(
+                    GeometryUtils.segment_intersects_polygon(tuple(p), (float(p_direct[0]), float(p_direct[1])), obs) for obs in obstacles
+                ):
                     best_point = p_direct
                     best_cost = float(np.linalg.norm(goal_np - p_direct))
             
@@ -134,6 +147,9 @@ class PathExtractor:
                 ok, z = self._find_zero_cross_along_ray(model, p, d, self.config.step_ds, max_dist=min(3.0, dist_goal))
                 if not ok:
                     continue
+                z_t = (float(z[0]), float(z[1]))
+                if any(GeometryUtils.segment_intersects_polygon(tuple(p), z_t, obs) for obs in obstacles):
+                    continue
                 dist_to_goal = float(np.linalg.norm(goal_np - z))
                 f_z = model.decision(z.reshape(1, -1))[0]
                 cost = dist_to_goal + 0.3 * abs(f_z)
@@ -146,7 +162,9 @@ class PathExtractor:
                     small_step = min(self.config.step_ds * 0.5, dist_goal)
                     p_fallback = p + heading * small_step
                     f_fallback = model.decision(p_fallback.reshape(1, -1))[0]
-                    if abs(f_fallback) < 1.5: 
+                    if abs(f_fallback) < 1.5 and not any(
+                        GeometryUtils.segment_intersects_polygon(tuple(p), (float(p_fallback[0]), float(p_fallback[1])), obs) for obs in obstacles
+                    ):
                         best_point = p_fallback
                     else:
                         return PathResult(points=path, reached=False)

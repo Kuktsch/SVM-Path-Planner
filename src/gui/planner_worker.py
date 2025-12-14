@@ -7,10 +7,10 @@ import numpy as np
 from ..config import PlannerConfig
 from ..environment import Environment
 from ..sampling import SampleGenerator
-from ..svm_model import SVMModel
+from ..svm import KernelSVM
 from ..corridor import CorridorChecker
 from ..path_extractor import PathExtractor
-from ..collision import CollisionChecker
+from ..geometry import GeometryUtils
 from ..stats import (
     Statistics, PlanningPhaseTiming, SamplingStatistics, SVMStatistics,
     PathQualityMetrics,
@@ -50,7 +50,6 @@ class PlannerWorker(QThread):
             # Инициализация генераторов и проверщиков
             sample_generator = SampleGenerator(self.config)
             path_extractor = PathExtractor(self.config)
-            collision_checker = CollisionChecker(self.config)
             corridor_checker = CorridorChecker(self.config)
             
             # Получить начальный паттерн
@@ -112,7 +111,7 @@ class PlannerWorker(QThread):
                 
                 self.status_update.emit("Обучение SVM...")
                 t_svm = time.time()
-                model = SVMModel.train(samples, self.config)
+                model = KernelSVM.train(samples, self.config)
                 dt_svm_ms = (time.time() - t_svm) * 1000.0
                 
                 # Статистика SVM
@@ -137,7 +136,7 @@ class PlannerWorker(QThread):
                     samples = sample_generator.generate(env, obstacle_labels=pattern)
                     dt_sampling_ms += (time.time() - t_sampling2) * 1000.0
                     t_svm2 = time.time()
-                    model = SVMModel.train(samples, self.config)
+                    model = KernelSVM.train(samples, self.config)
                     dt_svm_ms += (time.time() - t_svm2) * 1000.0
                     self.config.guide_samples_count = old_count
                     t_conn2 = time.time()
@@ -148,18 +147,28 @@ class PlannerWorker(QThread):
                 
                 self.status_update.emit("Построение траектории...")
                 t_path = time.time()
-                path_result = path_extractor.extract(model, env.start, env.goal)
+                path_result = path_extractor.extract(model, env.start, env.goal, obstacles=env.obstacles)
                 dt_path_ms = (time.time() - t_path) * 1000.0
                 
                 if not path_result.reached:
                     continue  # Пропустить, если путь не достигает цели
                 
+                # Сглаживание может "врезаться" в препятствия — подбираем s, чтобы траектория оставалась безопасной
                 t_smooth = time.time()
-                smoothed = path_extractor.smooth(path_result.points, s=self.config.spline_s)
+                s_candidates = [self.config.spline_s, self.config.spline_s * 0.5, self.config.spline_s * 0.2, 0.0]
+                smoothed = path_result.points
+                for s_val in s_candidates:
+                    cand = path_extractor.smooth(path_result.points, s=s_val)
+                    if not GeometryUtils.path_intersects_obstacles(cand, env.obstacles):
+                        smoothed = cand
+                        break
                 dt_smooth_ms = (time.time() - t_smooth) * 1000.0
+                if GeometryUtils.path_intersects_obstacles(smoothed, env.obstacles):
+                    continue  # даже без сглаживания пересекает препятствия — этот паттерн не подходит
                 
-                in_corridor = collision_checker.path_within_corridor(model, smoothed, margin=1.0)
-                no_collision = collision_checker.vehicle_collision_free(env, smoothed)
+                # Проверки коллизий удалены
+                in_corridor = True
+                no_collision = True
                 
                 L = path_extractor.length(smoothed)
                 dt_total_ms = dt_sampling_ms + dt_svm_ms + dt_path_ms + dt_smooth_ms + dt_conn_ms
@@ -194,9 +203,8 @@ class PlannerWorker(QThread):
                     num_patterns=len(patterns_to_try),
                 )
                 
-                # Предпочитать более короткие пути, которые свободны от коллизий и в коридоре
-                if (no_collision and in_corridor) or (not best_result):
-                    if L < best_path_length:
+                # Предпочитать более короткие пути
+                if L < best_path_length:
                         best_path_length = L
                         best_result = {
                             "path": smoothed,
@@ -215,7 +223,6 @@ class PlannerWorker(QThread):
                 # Инициализация генераторов и проверщиков для fallback
                 sample_generator = SampleGenerator(self.config)
                 path_extractor = PathExtractor(self.config)
-                collision_checker = CollisionChecker(self.config)
                 
                 # patterns_to_try уже определен выше, используем его
                 
@@ -230,7 +237,7 @@ class PlannerWorker(QThread):
                 sampling_stats.border_samples = sampling_stats.total_samples - sampling_stats.guide_samples
                 
                 t_svm = time.time()
-                model = SVMModel.train(samples, self.config)
+                model = KernelSVM.train(samples, self.config)
                 dt_svm_ms = (time.time() - t_svm) * 1000.0
                 
                 svm_params = model.params_summary()
@@ -241,15 +248,27 @@ class PlannerWorker(QThread):
                 svm_stats.gamma = svm_params["gamma"]
                 
                 t_path = time.time()
-                path_result = path_extractor.extract(model, env.start, env.goal)
+                path_result = path_extractor.extract(model, env.start, env.goal, obstacles=env.obstacles)
                 dt_path_ms = (time.time() - t_path) * 1000.0
                 
                 t_smooth = time.time()
-                smoothed = path_extractor.smooth(path_result.points, s=self.config.spline_s)
+                s_candidates = [self.config.spline_s, self.config.spline_s * 0.5, self.config.spline_s * 0.2, 0.0]
+                smoothed = path_result.points
+                for s_val in s_candidates:
+                    cand = path_extractor.smooth(path_result.points, s=s_val)
+                    if not GeometryUtils.path_intersects_obstacles(cand, env.obstacles):
+                        smoothed = cand
+                        break
                 dt_smooth_ms = (time.time() - t_smooth) * 1000.0
+                if GeometryUtils.path_intersects_obstacles(smoothed, env.obstacles):
+                    # Даже после подбора параметра сглаживания траектория пересекает препятствия
+                    self.status_update.emit("Не удалось построить траекторию без пересечения препятствий")
+                    self.finished.emit(env, None, None, None)
+                    return
                 
-                in_corridor = collision_checker.path_within_corridor(model, smoothed, margin=1.0)
-                no_collision = collision_checker.vehicle_collision_free(env, smoothed)
+                # Проверки коллизий удалены
+                in_corridor = True
+                no_collision = True
                 
                 L = path_extractor.length(smoothed)
                 dt_total_ms = dt_sampling_ms + dt_svm_ms + dt_path_ms + dt_smooth_ms

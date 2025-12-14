@@ -67,7 +67,7 @@ class EnvironmentStatistics:
         # Вычисление площади препятствий (для прямоугольников)
         total_obstacle_area = 0.0
         for obs in env.obstacles:
-            verts = obs.polygon.vertices
+            verts = obs.vertices
             if len(verts) >= 3:
                 # Shoelace formula для площади многоугольника
                 area = 0.0

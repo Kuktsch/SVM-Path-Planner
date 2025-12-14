@@ -3,9 +3,8 @@ import math
 
 Point = tuple[float, float]
 
-
 class GeometryUtils:
-    """Утилиты для работы с геометрией"""
+    """Функции для работы с геометрией"""
     
     @staticmethod
     def dot(a: Point, b: Point) -> float:
@@ -72,6 +71,67 @@ class GeometryUtils:
         a_min, a_max = GeometryUtils.project_polygon(av, axis)
         b_min, b_max = GeometryUtils.project_polygon(bv, axis)
         return not (a_max < b_min or b_max < a_min)
+    
+    @staticmethod
+    def _orient(a: Point, b: Point, c: Point) -> float:
+        """Ориентация тройки точек (знак площади параллелограмма)."""
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    
+    @staticmethod
+    def _on_segment(a: Point, b: Point, p: Point, eps: float = 1e-12) -> bool:
+        """Проверяет, что p лежит на отрезке [a,b] (с допуском eps)."""
+        return (
+            min(a[0], b[0]) - eps <= p[0] <= max(a[0], b[0]) + eps
+            and min(a[1], b[1]) - eps <= p[1] <= max(a[1], b[1]) + eps
+            and abs(GeometryUtils._orient(a, b, p)) <= eps
+        )
+    
+    @staticmethod
+    def segments_intersect(a: Point, b: Point, c: Point, d: Point, eps: float = 1e-12) -> bool:
+        """Проверяет пересечение отрезков [a,b] и [c,d]."""
+        o1 = GeometryUtils._orient(a, b, c)
+        o2 = GeometryUtils._orient(a, b, d)
+        o3 = GeometryUtils._orient(c, d, a)
+        o4 = GeometryUtils._orient(c, d, b)
+
+        # Общий случай
+        if (o1 > eps and o2 < -eps or o1 < -eps and o2 > eps) and (o3 > eps and o4 < -eps or o3 < -eps and o4 > eps):
+            return True
+
+        # Коллинеарные/граничные случаи
+        if abs(o1) <= eps and GeometryUtils._on_segment(a, b, c, eps):
+            return True
+        if abs(o2) <= eps and GeometryUtils._on_segment(a, b, d, eps):
+            return True
+        if abs(o3) <= eps and GeometryUtils._on_segment(c, d, a, eps):
+            return True
+        if abs(o4) <= eps and GeometryUtils._on_segment(c, d, b, eps):
+            return True
+
+        return False
+    
+    @staticmethod
+    def segment_intersects_polygon(a: Point, b: Point, poly: "Polygon") -> bool:
+        """Проверяет, что отрезок [a,b] пересекает/касается многоугольника или лежит внутри."""
+        if poly.contains_point(a) or poly.contains_point(b):
+            return True
+        for e1, e2 in poly.edges():
+            if GeometryUtils.segments_intersect(a, b, e1, e2):
+                return True
+        return False
+    
+    @staticmethod
+    def path_intersects_obstacles(path: list[Point], obstacles: list["Polygon"]) -> bool:
+        """True, если путь пересекает хотя бы одно препятствие."""
+        if len(path) < 2 or not obstacles:
+            return False
+        for i in range(len(path) - 1):
+            a = path[i]
+            b = path[i + 1]
+            for obs in obstacles:
+                if GeometryUtils.segment_intersects_polygon(a, b, obs):
+                    return True
+        return False
 
 
 class Polygon:

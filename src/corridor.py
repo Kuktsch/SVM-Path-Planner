@@ -1,7 +1,7 @@
 import numpy as np
 from collections import deque
 
-from .svm_model import SVMModel
+from .svm import KernelSVM
 from .config import PlannerConfig
 
 
@@ -28,7 +28,7 @@ class CorridorChecker:
         XY = np.stack([XX.ravel(), YY.ravel()], axis=1)
         return XY, xs, ys
     
-    def check(self, model: SVMModel, bounds: tuple[float, float, float, float], start: tuple[float, float], goal: tuple[float, float]) -> ConnectivityResult:
+    def check(self, model: KernelSVM, bounds: tuple[float, float, float, float], start: tuple[float, float], goal: tuple[float, float]) -> ConnectivityResult:
         """Проверяет связность коридора между стартом и целью"""
         XY, xs, ys = self.build_grid(bounds)
         f = model.boundary_mask(XY, margin=1.0)
