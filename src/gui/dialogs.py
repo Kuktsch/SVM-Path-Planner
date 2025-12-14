@@ -57,6 +57,20 @@ class ParametersDialog(QDialog):
             config.sector_angle_deg = float(self.theta_edit.text())
             config.max_steps = int(self.max_steps_edit.text())
             config.pattern_trials = int(self.pattern_trials_edit.text())
+
+            if config.C <= 0:
+                return None
+            if config.gamma <= 0:
+                return None
+            if config.step_ds <= 0:
+                return None
+            if config.sector_angle_deg <= 0:
+                return None
+            if config.max_steps <= 0:
+                return None
+            if config.pattern_trials <= 0:
+                return None
+
             return config
         except ValueError:
             return None

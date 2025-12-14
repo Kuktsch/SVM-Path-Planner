@@ -29,7 +29,7 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/yourusername/svm-path-planner.git
+git clone https://github.com/Kuktsch/svm-path-planner.git
 cd svm-path-planner
 ```
 

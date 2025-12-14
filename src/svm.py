@@ -71,7 +71,7 @@ class KernelSVM:
         return self
     
     def _examine_example(self, i2, K, y, f_cache):
-        """Оптимизированная проверка примера i2"""
+        """Проверка примера i2"""
         result = 0
         y2 = y[i2]
         alpha2 = self.alphas[i2]
@@ -79,7 +79,7 @@ class KernelSVM:
         
         r2 = E2 * y2
         
-        # Проверяем условие KKT
+        # Проверяем условие Karush-Kuhn-Tucker (KKT)
         if (r2 < -1e-3 and alpha2 < self.C) or (r2 > 1e-3 and alpha2 > 0):
             # Сначала пробуем примеры с alphas на границах
             indices = np.where((self.alphas > 1e-6) & (self.alphas < self.C - 1e-6))[0]
@@ -98,7 +98,7 @@ class KernelSVM:
         return result
 
     def _take_step(self, i1, i2, K, y, f_cache):
-        """Оптимизация пары alphas (структурное программирование)"""
+        """Оптимизация пары alphas"""
         result = False
         
         # Проверка валидности индексов
@@ -167,7 +167,6 @@ class KernelSVM:
     def predict(self, Xtest):
         return np.sign(self.decision_function(Xtest)).astype(int)
 
-    # --- Удобные методы (раньше были в SVMModel) ---
     @classmethod
     def train(cls, samples, config) -> "KernelSVM":
         svm = cls(C=config.C, gamma=config.gamma)

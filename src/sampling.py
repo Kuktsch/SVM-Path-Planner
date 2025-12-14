@@ -13,12 +13,10 @@ class Samples:
 
 class SampleGenerator:
     """Генератор обучающих выборок для SVM"""
-    
     def __init__(self, config: PlannerConfig):
         self.config = config
     
     def _interpolate_edge(self, a: Point, b: Point, n: int) -> list[Point]:
-        """Интерполирует точки вдоль ребра"""
         return [(
             a[0] + (b[0] - a[0]) * t,
             a[1] + (b[1] - a[1]) * t,
